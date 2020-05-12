@@ -9,6 +9,7 @@ import 'package:pedantic/pedantic.dart';
 import 'mealbox_dart_bot.dart';
 import 'misc.dart';
 
+
 class MealboxDartBotChannel extends ApplicationChannel {
   @override
   Future prepare() async {
@@ -17,6 +18,8 @@ class MealboxDartBotChannel extends ApplicationChannel {
 
     final client = await Client.connect('redis://localhost:6379');
     final commands = client.asCommands<String, String>();
+    await commands.auth(
+        'EBAAB944A27812F3AB68C6E23498D070BB36CEFB25CC1A1A7B7C01C70066C4D3');
     await initRedis(client, commands);
   }
 
@@ -46,6 +49,17 @@ class MealboxDartBotChannel extends ApplicationChannel {
           unawaited(messageArrived(body));
         }
 
+        return Response.accepted();
+      },
+    );
+
+    router.route('/mercury').linkFunction(
+      (request) async {
+        final Map<String, dynamic> d = await request.body.decode();
+        print(d.toString());
+        if (d['type'] as String == 'message') {
+          return Response.ok('hello........');
+        }
         return Response.accepted();
       },
     );
@@ -104,7 +118,12 @@ class MealboxDartBotChannel extends ApplicationChannel {
   ///proceed with finding and processing the key word
   void processKeyWord(String keyword, Body body, User user) {
     switch (keyword) {
-      case Keywords.ADD_NUMBER:
+      case Keywords.CANCEL:
+        {
+          cancelLastRequest(body, user);
+        }
+        break;
+      case Keywords.CHANGE_NUMBER:
         {
           addNewNumber(body, user);
         }
@@ -155,19 +174,51 @@ class MealboxDartBotChannel extends ApplicationChannel {
     }
   }
 
+  ///user wants to cancel the last request
+  void cancelLastRequest(Body body, User user) async {
+    if (user.asked == User.PHONE) {
+      ///phone request can be cancelled
+      user.asked = '';
+
+      ///save the session
+      await _commands.hmset(body.payLoad.sender.phone, hash: user.map);
+
+      ///post ok cancelled
+      final nextMessage =
+          'Okay change request cancelled..check all details by sending'
+          ' *${Keywords.ACCOUNT.toLowerCase()}*';
+
+      ///post the message
+      post(body.payLoad.sender.phone, nextMessage);
+    } else {
+      ///we dont know why customer asked cancellation we dont know how to handle the request
+      sorryIDidntUnderstand('Please give the details requested..', body, user);
+    }
+  }
+
   ///user wants to update the contact number
-  void addNewNumber(Body body,User user)async{
+  void addNewNumber(Body body, User user) async {
     ///prepare next Message
-    final String nextMessage = 'Your existing number is *${user}'
+    final String nextMessage =
+        'Your existing contact number for phone call from our side is *${get10NumberPhone(user.phone)}*\n*send the new 10 digit phone number to update..*';
+
+    ///set asked so we can process the reply next session
+    user.asked = User.PHONE;
+
+    ///save session
+    await _commands.hmset(body.payLoad.sender.phone, hash: user.map);
+
+    ///post the message
+    post(body.payLoad.sender.phone, nextMessage);
   }
 
   ///user wants all the details about their account
-  void sendAccountDeets(Body body,User user)async{
+  void sendAccountDeets(Body body, User user) async {
     final nextMessage = 'Fallowing is your details with us'
-    '\n_Name:_ ${user.name}'
-    '\n_Number:_ ${body.payLoad.sender.phone}'
-    '\n_Address:_ ${user.address}'
-    '\n_PIN:_ ${user.pin}';
+        '\n_Name:_ ${user.name}'
+        '\n_Number:_ ${get10NumberPhone(user.phone)}'
+        '\n_Address:_ ${user.address}'
+        '\n_PIN:_ ${user.pin}';
 
     ///send the message formatted
     post(body.payLoad.sender.phone, nextMessage);
@@ -257,7 +308,7 @@ class MealboxDartBotChannel extends ApplicationChannel {
   ///remove the existing address and ask for the new
   void resetUserAddress(Body body, User user) {
     final nextMessage =
-        'Your existing address\n*${user.address}*\n*${user.pin}*\nis removed';
+        'Your existing address\n*${user.address}*\n*${user.pin}* is removed';
     user.address = '';
     user.pin = '';
     askAddress(nextMessage, body, user);
@@ -308,7 +359,9 @@ class MealboxDartBotChannel extends ApplicationChannel {
     } else if (user.asked == User.ADDRESS) {
       final text = body.payLoad.dataPayload.text;
       final address = getAddressFromText(text);
-      if (address.length == 2) {
+      if (address.first.length < 11) {
+        addressIsShort(body, user);
+      } else if (address.length == 2) {
         ///set address with PIN sent
         user.address = address.first;
         user.pin = address.last;
@@ -364,40 +417,86 @@ class MealboxDartBotChannel extends ApplicationChannel {
         askPIN(nextMessage, body, user);
       }
     } else if (user.asked == User.LOCATION) {
-      ///parse user loaction using the location message they have sent
-      final latitude = body.payLoad.dataPayload.latitude;
-      final longitude = body.payLoad.dataPayload.longitude;
+      ///process only if it is location message
+      if (body.payLoad.type == Payload.LOCATION) {
+        ///parse user loaction using the location message they have sent
+        final latitude = body.payLoad.dataPayload.latitude;
+        final longitude = body.payLoad.dataPayload.longitude;
 
-      ///post the latLng to google to check the PIN
-      final pin = await postForGeocode('$latitude,$longitude');
+        ///post the latLng to google to check the PIN
+        final pin = await postForGeocode('$latitude,$longitude');
 
-      ///compare the pin from google with the one they've provided
-      if (pin == user.pin) {
-        ///check if its updation or registration
-        if (user.isNotComplete()) {
-          ///its registration
-          ///save the location
-          user.location = '$latitude,$longitude';
-          registrationComplete(body, user);
+        ///compare the pin from google with the one they've provided
+        if (pin == user.pin) {
+          ///check if its updation or registration
+          if (user.isNotComplete()) {
+            ///its registration
+            ///save the location
+            user.location = '$latitude,$longitude';
+            registrationComplete(body, user);
+          } else {
+            ///its updation
+            ///save the location
+            ///prepare next message
+            const nextMessage = 'I have saved your location..';
+            user.location = '$latitude,$longitude';
+            updationDone(nextMessage, body, user);
+          }
         } else {
-          ///its updation
-          ///save the location
-          ///prepare next message
-          const nextMessage = 'I have saved your location..';
-          user.location = '$latitude,$longitude';
-          updationDone(nextMessage, body, user);
+          locationDontMatchAddress(body, user);
         }
       } else {
-        locationDontMatchAddress(body, user);
+        ///we were expecting a location but the user sent some thing else
+        ///prepare reply
+        const String nextMessage = 'I\'m expecting a location..';
+        sorryIDidntUnderstand(nextMessage, body, user);
+      }
+    } else if (user.asked == User.PHONE) {
+      final String phone =
+          getUserPhoneNumberFromText(body.payLoad.dataPayload.text);
+      if (phone.isNotEmpty) {
+        ///phone number parsed
+        user.phone = phone;
+
+        ///phone number updation success
+        phoneUpdated(body, user);
+      } else {
+        ///unable to understand the last message
+        const String nextMessage =
+            'I was unable to find the 10 digit phone number..';
+        sorryIDidntUnderstand(nextMessage, body, user);
       }
     }
+  }
+
+  ///the user sent address is short
+  void addressIsShort(Body body, User user) async {
+    const String nextMessage = 'I need reasonably complete address please';
+
+    sorryIDidntUnderstand(nextMessage, body, user);
+  }
+
+  ///new phone number succesfully updated
+  void phoneUpdated(Body body, User user) async {
+    ///prepare the next message
+    final String nextMessage =
+        'Okay we will use *${user.phone}* as your contact number'
+        '\nbut you should know that we\'ll use your number ${body.payLoad.sender.phone} as backup..';
+
+    ///save the session and deets
+    user.asked = '';
+    await _commands.hmset(body.payLoad.sender.phone, hash: user.map);
+
+    ///send reply
+    post(body.payLoad.sender.phone, nextMessage);
   }
 
   ///all the user detail has been set,proceed to order
   void registrationComplete(Body body, User user) async {
     const nextMessage = '*You have successfully set up a account with us*';
 
-    ///save session
+    ///save session and phone number
+    user.phone = body.payLoad.sender.phone;
     user.asked = '';
     await _commands.hmset(body.payLoad.sender.phone, hash: user.map);
 
@@ -422,7 +521,7 @@ class MealboxDartBotChannel extends ApplicationChannel {
 
   ///send reply to [Keywords.OPTIONS] keyword, include all the available options
   void sendFullOptions(Body body, User user) {
-    final nextMessage = '\nNow,'
+    final nextMessage =
         '\n• To order food just send *${Keywords.ORDER.toLowerCase()}*'
         '\n• To see the account details send *${Keywords.ACCOUNT.toLowerCase()}*'
         '\n• To see the details about next meal send *${Keywords.NEXT_MEAL.toLowerCase()}*'
@@ -430,7 +529,7 @@ class MealboxDartBotChannel extends ApplicationChannel {
         '\n• To change name send *${Keywords.CHANGE_NAME.toLowerCase()}*'
         '\n• To change address send *${Keywords.CHANGE_ADDRESS.toLowerCase()}*'
         '\n• To change location send *${Keywords.CHANGE_LOCATION.toLowerCase()}*'
-        '\n• To Add alternative contact num send *${Keywords.ADD_NUMBER.toLowerCase()}*'
+        '\n• To Add alternative contact num send *${Keywords.CHANGE_NUMBER.toLowerCase()}*'
         '\n\nHave a happy meal :)';
 
     ///post the options
@@ -471,7 +570,7 @@ class MealboxDartBotChannel extends ApplicationChannel {
     ///might look into making conversation more random
     final pins = User.bulletPins.join('\n');
     final String nextMessage =
-        '$s\n\nYou\'ve missed the PIN code, we serve in these PIN codes for now\n$pins\n\n*Tell me your PIN code..*';
+        '$s\n\nYou\'ve missed the PIN code, we serve only in these PIN codes for now\n$pins\n\n*Tell me your PIN code..*';
 
     ///save user deets for next session
     user.asked = User.PIN;
@@ -562,12 +661,12 @@ class MealboxDartBotChannel extends ApplicationChannel {
         Map.castFrom(json.decode(response.body) as Map);
 
     ///this encodes full fledged valid address from google using the users location, should consider using this
-    try{
+    try {
       final String address =
-        Map.castFrom(List.castFrom(map['results'] as List)?.first as Map)[
-            'formatted_address'] as String;
-    return getPinFromText(address);
-    } catch(e){
+          Map.castFrom(List.castFrom(map['results'] as List)?.first as Map)[
+              'formatted_address'] as String;
+      return getPinFromText(address);
+    } catch (e) {
       print(e);
       return '';
     }

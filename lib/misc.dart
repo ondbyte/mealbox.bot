@@ -12,26 +12,46 @@ class Keywords {
   ///the whatsapp user keywords/commands
   static const String CHANGE_ADDRESS = 'CHANGE ADDRESS',
       CHANGE_NAME = 'CHANGE NAME',
-      ADD_NUMBER = 'ADD NUMBER',
+      CHANGE_NUMBER = 'CHANGE NUMBER',
       CHANGE_LOCATION = 'CHANGE LOCATION',
       ORDER = 'ORDER',
       NEXT_MEAL = 'NEXT MEAL',
       ACCOUNT = 'ACCOUNT',
       CHANGE_DETAILS = 'CHANGE DETAILS',
       OPTIONS = 'OPTIONS',
+      CANCEL = 'CANCEL',
       YES = 'YES';
   static List<String> keyWords = [
     CHANGE_ADDRESS,
     CHANGE_LOCATION,
     CHANGE_NAME,
-    ADD_NUMBER,
+    CHANGE_NUMBER,
     ORDER,
     NEXT_MEAL,
     ACCOUNT,
     CHANGE_DETAILS,
     OPTIONS,
+    CANCEL,
     YES,
   ];
+}
+
+String get10NumberPhone(String s) {
+  return s.replaceFirst('91', '');
+}
+
+String getUserPhoneNumberFromText(String ss) {
+  final intRegex = RegExp("(?<![0-9])[0-9]{10,12}(?![0-9])");
+  final phone = intRegex.allMatches(ss).map((m) => m.group(0));
+  if (phone.isNotEmpty) {
+    if (phone.first.length == 12) {
+      final s = phone.first.replaceFirst('91', '');
+      return s;
+    } else if (phone.first.length == 10) {
+      return phone.first;
+    }
+  }
+  return '';
 }
 
 String getKeyWordFromText(String ss) {
@@ -47,12 +67,15 @@ String getKeyWordFromText(String ss) {
 }
 
 List<String> getAddressFromText(String s) {
-  final intRegex = RegExp("(\\d{6})");
+  final intRegex = RegExp("(?<![0-9])[0-9]{5,16}(?![0-9])");
   final pin = intRegex.allMatches(s).map((m) => m.group(0));
   if (pin.isEmpty) {
     return [s.trim()];
   }
   if (pin.length == 1 && allowedPINs(pin.first)) {
+    if (pin.first.length != 6) {
+      return [s.replaceAll(pin.first, '').trim()];
+    }
     return [s.replaceAll(pin.first, '').trim(), pin.first];
   }
   pin.forEach((pin) {
@@ -67,7 +90,7 @@ bool allowedPINs(String p) {
 }
 
 String getPinFromText(String s) {
-  final intRegex = RegExp("(\\d{6})");
+  final intRegex = RegExp("(?<![0-9])[0-9]{6}(?![0-9])");
   final pin = intRegex.allMatches(s).map((m) => m.group(0));
   if (pin.isEmpty) {
     return '';
@@ -130,18 +153,24 @@ class User {
     keyword = map[KEYWORD];
     phone = map[PHONE];
   }
-  String asked, keyword,phone;
+  String asked, keyword, phone;
   String name, address, location, pin;
 
   bool isComplete() {
     return name.isNotEmpty &&
         address.isNotEmpty &&
         pin.isNotEmpty &&
-        location.isNotEmpty&&
-        phone.isEmpty;
+        location.isNotEmpty &&
+        phone.isNotEmpty;
   }
 
-  bool isNotComplete() => !isComplete();
+  bool isNotComplete() {
+    return name.isEmpty ||
+        address.isEmpty ||
+        pin.isEmpty ||
+        location.isEmpty ||
+        phone.isEmpty;
+  }
 
   static List<String> pins = [
     '570009',
