@@ -38,13 +38,6 @@ class Payload {
     _sender = Sender(dynamicSender: getValueDynamic(dynamicPayload, 'sender'));
   }
 
-  static String TEXT = 'text',
-      IMAGE = 'image',
-      AUDIO = 'audio',
-      VIDEO = 'video',
-      DOCUMENT = 'file',
-      LOCATION = 'location',
-      CONTACT = 'contact';
   String _id, _source, _type;
   DataPayload _dataPayload;
   Sender _sender;
@@ -128,31 +121,82 @@ Map<String, dynamic> getValueDynamic(Map<dynamic, dynamic> map, String key) {
   return null;
 }
 
-class Body{
+class MBody {
+  MBody(Map<String, dynamic> map) {
+    updateType = getValue(map, 'type');
+    if (updateType  == MBody.MESSAGE) {
+      final Map<String, dynamic> message = getValueDynamic(map, 'message');
+      messageType = getValue(message, 'type');
+      if (messageType == MBody.TEXT) {
+        text = getValue(message, 'text');
+      } else if(messageType == MBody.LOCATION){
+        final String s = getValue(message, 'payload');
+        final List<String> ll = s.split(',');
+        latitude = ll.first;
+        longitude = ll.last;
+      }
+    }
 
-  Body(Map<String,dynamic> map,API type){
-    if(type==API.gupshup){
+    if (map.containsKey('user')) {
+      final Map<String, dynamic> user = getValueDynamic(map, 'user');
+      if(user.containsKey('phone')){
+        phone = getValue(user, 'phone');
+      }
+    }
+  }
+  static String TEXT = 'text', LOCATION = 'location';
+  static String MESSAGE = 'message';
+  String updateType, messageType, text,phone,latitude,longitude;
+}
+
+class Body {
+  Body(Map<String, dynamic> map, API type) {
+    _api = type;
+    if (type == API.gupshup) {
       asignGupshupParameters(map);
-    } else if(type==API.maytapi){
+    } else if (type == API.maytapi) {
       assignMaytapiParameters(map);
     }
   }
-  static String PAYLOAD_TEXT = 'text',PAYLOAD_LOC = 'location';
-  String text,payLoadType;
-  void asignGupshupParameters(Map<String,dynamic> map){
-    GSBody gsBody = GSBody(map);
-    text = gsBody.payLoad.dataPayload.text;
-    payLoadType = gsBody.payLoad.type;
 
+  API _api;
+
+  API get api =>_api;
+
+  ///message types
+
+  static String TEXT = 'text',
+      IMAGE = 'image',
+      AUDIO = 'audio',
+      VIDEO = 'video',
+      DOCUMENT = 'file',
+      LOCATION = 'location',
+      CONTACT = 'contact';
+
+  String EVENT_TYPE, MESSAGE_TYPE;
+  String text, phone, latitude, longitude;
+  void asignGupshupParameters(Map<String, dynamic> map) {
+    final GSBody gsBody = GSBody(map);
+    text = gsBody.payLoad.dataPayload.text;
+    phone = gsBody.payLoad.sender.phone;
+    latitude = gsBody.payLoad.dataPayload.latitude;
+    longitude = gsBody.payLoad.dataPayload.longitude;
+    EVENT_TYPE = gsBody.type;
+    MESSAGE_TYPE = gsBody.payLoad.type;
   }
 
-  void assignMaytapiParameters(Map<String,dynamic> map){
-
+  void assignMaytapiParameters(Map<String, dynamic> map) {
+    final MBody mBody = MBody(map);
+    text = mBody.text;
+    phone = mBody.phone;
+    latitude = mBody.latitude;
+    longitude = mBody.longitude;
+    EVENT_TYPE = mBody.updateType;
+    MESSAGE_TYPE = mBody.messageType;
   }
 }
 
-
-enum API{
+enum API {
   gupshup,
   maytapi,
 }

@@ -1,4 +1,6 @@
 //check is this a order string
+import 'dart:math';
+
 bool isOrder(String s) {
   final String text = s.toLowerCase();
 
@@ -6,6 +8,35 @@ bool isOrder(String s) {
     return true;
   }
   return false;
+}
+
+Random _random = Random();
+String imStill() {
+  switch (_random.nextInt(4)) {
+    case 0:
+      {
+        return 'I am still young and learning';
+      }
+      break;
+    case 1:
+      {
+        return 'I am still learning';
+      }
+      break;
+    case 2:
+      {
+        return 'I am still a learner';
+      }
+      break;
+    case 3:
+      {
+        return 'Currently still lerning how to traverse this world';
+      }
+      break;
+    default: {
+      return 'My bad';
+    }
+  }
 }
 
 class Keywords {
@@ -86,7 +117,7 @@ List<String> getAddressFromText(String s) {
 
 ///check the PIN of the address comes in the serviceable area
 bool allowedPINs(String p) {
-  return p.startsWith('57');
+  return p.startsWith('570');
 }
 
 String getPinFromText(String s) {

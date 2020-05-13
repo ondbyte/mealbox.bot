@@ -17,6 +17,7 @@ const String _maytapiEnd =
     'https://api.maytapi.com/api/731b30d3-9f99-482f-9e0a-1b190bdab831';
 const String _setWebHook = '/setWebHook';
 const String myWebHook = 'https://b59d5313.ngrok.io/maytapi';
+const String _sendMEssageEnd = '$_maytapiEnd/2260/sendMessage';
 
 class MealboxDartBotChannel extends ApplicationChannel {
   @override
@@ -29,7 +30,7 @@ class MealboxDartBotChannel extends ApplicationChannel {
     await commands.auth(
         'EBAAB944A27812F3AB68C6E23498D070BB36CEFB25CC1A1A7B7C01C70066C4D3');
     await initBot(commands);
-    await initMaytapi();
+    //await initMaytapi();
   }
 
   Future<void> initMaytapi() async {
@@ -45,7 +46,7 @@ class MealboxDartBotChannel extends ApplicationChannel {
       }),
     );
 
-    print(response.body);
+    //print(response.body);
   }
 
   IamBot _bot;
@@ -62,9 +63,9 @@ class MealboxDartBotChannel extends ApplicationChannel {
       (request) async {
         final Map<String, dynamic> d = await request.body.decode();
         //print(d.toString());
-        final Body body = Body(d);
+        final Body body = Body(d,API.gupshup);
         //print(body);
-        if (body.type == Body.MESSAGE) {
+        if (body.EVENT_TYPE == GSBody.MESSAGE) {
           unawaited(_bot.messageArrived(body));
         }
 
@@ -75,10 +76,11 @@ class MealboxDartBotChannel extends ApplicationChannel {
     router.route('/maytapi').linkFunction(
       (request) async {
         final Map<String, dynamic> d = await request.body.decode();
-        print(d.toString());
-        if (d['type'] as String == 'message') {
-          return Response.ok('hello........');
+        final Body body = Body(d,API.maytapi);
+        if(body.EVENT_TYPE == MBody.MESSAGE){
+          unawaited(_bot.messageArrived(body));
         }
+        
         return Response.accepted();
       },
     );
