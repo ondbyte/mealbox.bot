@@ -1,5 +1,5 @@
-class Body {
-  Body(Map<String, dynamic> dynamicBody) {
+class GSBody {
+  GSBody(Map<String, dynamic> dynamicBody) {
     _app = getValue(dynamicBody, 'app');
     _timeStamp = getValue(dynamicBody, 'timestamp');
     _type = getValue(dynamicBody, 'type');
@@ -126,4 +126,33 @@ Map<String, dynamic> getValueDynamic(Map<dynamic, dynamic> map, String key) {
     return Map.castFrom(map[key] as Map);
   }
   return null;
+}
+
+class Body{
+
+  Body(Map<String,dynamic> map,API type){
+    if(type==API.gupshup){
+      asignGupshupParameters(map);
+    } else if(type==API.maytapi){
+      assignMaytapiParameters(map);
+    }
+  }
+  static String PAYLOAD_TEXT = 'text',PAYLOAD_LOC = 'location';
+  String text,payLoadType;
+  void asignGupshupParameters(Map<String,dynamic> map){
+    GSBody gsBody = GSBody(map);
+    text = gsBody.payLoad.dataPayload.text;
+    payLoadType = gsBody.payLoad.type;
+
+  }
+
+  void assignMaytapiParameters(Map<String,dynamic> map){
+
+  }
+}
+
+
+enum API{
+  gupshup,
+  maytapi,
 }
