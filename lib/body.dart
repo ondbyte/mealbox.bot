@@ -1,7 +1,5 @@
 class GSBody {
   GSBody(Map<String, dynamic> dynamicBody) {
-    _app = getValue(dynamicBody, 'app');
-    _timeStamp = getValue(dynamicBody, 'timestamp');
     _type = getValue(dynamicBody, 'type');
     _payload = Payload(dynamicPayload: getValueDynamic(dynamicBody, 'payload'));
   }
@@ -10,20 +8,16 @@ class GSBody {
       USER_EVENT = 'user-event',
       MESSAGE_EVENT = 'message-event';
 
-  String _app, _timeStamp, _type;
+  String _type;
   Payload _payload;
 
   String get type => _type;
-
-  String get timeStamp => _timeStamp;
-
-  String get app => _app;
 
   Payload get payLoad => _payload;
 
   @override
   String toString() {
-    return '{app: $app, timeStamp:$timeStamp, type:$type, payload:${payLoad.toString()}}';
+    return '{type:$type, payload:${payLoad.toString()}}';
   }
 }
 

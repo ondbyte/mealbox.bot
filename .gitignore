@@ -13,4 +13,5 @@ Dart_Packages.xml
 .idea/
 *.aqueduct.pid
 .dart_tool/
+redis-6.0.1/
 

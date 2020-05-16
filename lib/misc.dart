@@ -10,6 +10,173 @@ bool isOrder(String s) {
   return false;
 }
 
+bool isBreakFastTime(String s) {
+  final String ss = s.trim().replaceAll(' ', '').toLowerCase();
+
+  return breakFastTimings().split(',').any((t) {
+    return t == ss;
+  });
+}
+
+bool isLunchTime(String s) {
+  final String ss = s.trim().replaceAll(' ', '').toLowerCase();
+
+  return lunchTimings().split(',').any((t) {
+    return t == ss;
+  });
+}
+
+bool isDinnerTime(String s) {
+  final String ss = s.trim().replaceAll(' ', '').toLowerCase();
+
+  return dinnerTimings().split(',').any((t) {
+    return t == ss;
+  });
+}
+
+int get24HRFormat(String s) {
+  int digit;
+  if (s.length == 4) {
+    digit = int.tryParse(s[0] + s[1]);
+  } else {
+    digit = int.tryParse(s[0]);
+  }
+  if (digit == null) {
+    throw Exception('thisShouldHaveNeverHappened');
+  } else {
+    if (s.contains('pm')) {
+      if (digit != 12) {
+        digit = digit + 12;
+      }
+    }
+  }
+  return digit;
+}
+
+DateTime getOrderingTime(String date, String text) {
+  final String ss = text.trim().replaceAll(' ', '').toLowerCase();
+  final int time = get24HRFormat(ss);
+  if (time == null) {
+    return null;
+  }
+
+  final DateTime dt = DateTime.parse(date);
+  return DateTime(dt.year, dt.month, dt.day, time);
+}
+
+bool isToday(DateTime dt) {
+  final DateTime today = DateTime.now();
+  if (dt.year == today.year && dt.month == today.month && dt.day == today.day) {
+    return true;
+  }
+  return false;
+}
+
+String formatDateForConvo(DateTime dt) {
+  final DateTime today = DateTime.now();
+  final DateTime tomo = DateTime(today.year, today.month, today.day + 1);
+  if (dt.year == today.year && dt.month == today.month && dt.day == today.day) {
+    return 'Today';
+  } else if (dt.year == tomo.year &&
+      dt.month == tomo.month &&
+      dt.day == tomo.day) {
+    return 'Tomorrow';
+  }
+  return [dt.day, dt.month, dt.year].join('/');
+}
+
+DateTime parseDate(String s) {
+  final tmp = s.trim().replaceAll(' ', '');
+
+  final DateTime dt = DateTime.now();
+
+  if (s.endsWith('today') && s.length < 10) {
+    return DateTime(dt.year, dt.month, dt.day);
+  } else if (s.endsWith('tomorrow') && s.length < 10) {
+    return DateTime(dt.year, dt.month, dt.day + 1);
+  }
+  final List<int> date = [];
+  if (tmp.contains('/')) {
+    tmp.split('/').forEach((d) {
+      date.add(int.tryParse(d));
+    });
+  } else if (tmp.contains('-')) {
+    tmp.split('-').forEach((d) {
+      date.add(int.tryParse(d));
+    });
+  }
+  if (date.any((d) {
+    return d == null;
+  })) {
+    return null;
+  } else {
+    return DateTime(date[2], date[1], date[0]);
+  }
+}
+
+String greeting() {
+  final DateTime dt = DateTime.now();
+  if (dt.isAfter(DateTime(dt.year, dt.month, dt.day, 2))) {
+    if (dt.isBefore(DateTime(dt.year, dt.month, dt.day, 12))) {
+      return 'Morning';
+    }
+    if (dt.isBefore(DateTime(dt.year, dt.month, dt.day, 15))) {
+      return 'Afternoon';
+    }
+    if (dt.isBefore(DateTime(dt.year, dt.month, dt.day, 22))) {
+      return 'Evening';
+    }
+  }
+  return 'Night';
+}
+
+bool isGreeting(String s) {
+  final String tmp = s.trim().toLowerCase().replaceAll(' ', '');
+  if (tmp.endsWith('hello')) {
+    return true;
+  }
+  if (tmp.endsWith('hi')) {
+    return true;
+  }
+  if (tmp.endsWith('goodmorning')) {
+    return true;
+  }
+  if (tmp.endsWith('goodafternoon')) {
+    return true;
+  }
+  if (tmp.endsWith('goodnight')) {
+    return true;
+  }
+  return false;
+}
+
+String getAvailableOrders({bool isToday = true}) {
+  String s = '';
+  final DateTime dt = DateTime.now();
+  if (!isToday || dt.isBefore(DateTime(dt.year, dt.month, dt.day, 10))) {
+    s = '\n*${Keywords.BREAKFAST.toLowerCase()}*';
+  }
+  if (!isToday || dt.isBefore(DateTime(dt.year, dt.month, dt.day, 14))) {
+    s = '$s\n*${Keywords.LUNCH.toLowerCase()}*';
+  }
+  if (!isToday || dt.isBefore(DateTime(dt.year, dt.month, dt.day, 21))) {
+    s = '$s\n*${Keywords.DINNER.toLowerCase()}*';
+  }
+  return s;
+}
+
+String breakFastTimings() {
+  return '8am,9am,10am';
+}
+
+String lunchTimings() {
+  return '12pm,1pm,2pm';
+}
+
+String dinnerTimings() {
+  return '7pm,8pm,9pm';
+}
+
 Random _random = Random();
 String imStill() {
   switch (_random.nextInt(4)) {
@@ -33,9 +200,10 @@ String imStill() {
         return 'Currently still lerning how to traverse this world';
       }
       break;
-    default: {
-      return 'My bad';
-    }
+    default:
+      {
+        return 'My bad';
+      }
   }
 }
 
@@ -51,7 +219,12 @@ class Keywords {
       CHANGE_DETAILS = 'CHANGE DETAILS',
       OPTIONS = 'OPTIONS',
       CANCEL = 'CANCEL',
-      YES = 'YES';
+      YES = 'YES',
+      BREAKFAST = 'BREAKFAST',
+      LUNCH = 'LUNCH',
+      DINNER = 'DINNER',
+      WHEN = 'WHEN',
+      TIME_FIXED = 'TIME_FIXED';
   static List<String> keyWords = [
     CHANGE_ADDRESS,
     CHANGE_LOCATION,
@@ -63,6 +236,9 @@ class Keywords {
     CHANGE_DETAILS,
     OPTIONS,
     CANCEL,
+    BREAKFAST,
+    LUNCH,
+    DINNER,
     YES,
   ];
 }
@@ -183,8 +359,9 @@ class User {
     pin = map[PIN];
     keyword = map[KEYWORD];
     phone = map[PHONE];
+    order_date = map[ORDER_DATE];
   }
-  String asked, keyword, phone;
+  String asked, keyword, phone, order_date;
   String name, address, location, pin;
 
   bool isComplete() {
@@ -222,7 +399,8 @@ class User {
       PIN = 'pin',
       ASKED = 'asked',
       PHONE = 'phone',
-      KEYWORD = 'keyword';
+      KEYWORD = 'keyword',
+      ORDER_DATE = 'order_date';
 
   static Map<String, String> userMap = {
     ASKED: '',
@@ -232,6 +410,7 @@ class User {
     PIN: '',
     PHONE: '',
     KEYWORD: '',
+    ORDER_DATE: '',
   };
 
   Map<String, String> get map => {
@@ -242,5 +421,6 @@ class User {
         PIN: pin,
         PHONE: phone,
         KEYWORD: keyword,
+        ORDER_DATE:order_date,
       };
 }

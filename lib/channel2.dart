@@ -17,10 +17,14 @@ class IamBot {
 
   //Handle normal messages from user
   Future<void> messageArrived(Body body) async {
-    if (body.MESSAGE_TYPE == Body.TEXT) {
-      await textMessageArrived(body);
-    } else if (body.MESSAGE_TYPE == Body.LOCATION) {
-      await locationMessageArrived(body);
+    if (!_dumping) {
+      if (body.MESSAGE_TYPE == Body.TEXT) {
+        await textMessageArrived(body);
+      } else if (body.MESSAGE_TYPE == Body.LOCATION) {
+        await locationMessageArrived(body);
+      }
+    } else {
+      post(body, 'Get back to me after a minute may be..');
     }
   }
 
@@ -55,28 +59,120 @@ class IamBot {
       ///check if user is going through registration process
       if (user.asked.isNotEmpty) {
         await userIncomplete(body, user);
-      }else {
+      } else {
         ///we dont understand the message that has been sent
         ///check anything is pending
-        checkPendingWork(body,user);
+        checkPendingWork(body, user);
       }
     } else {
       ///process the keyword command
       processKeyWord(keyword, body, user);
-    } 
+    }
   }
 
   ///we werent able to get anything thats related to the motive of this bot, answer accordingly
-  void checkPendingWork(Body body,User user){
-    if(user.asked.isNotEmpty){
-      ///we asked something in t
-      sorryIDidntUnderstand('', body, user);
+  void checkPendingWork(Body body, User user) {
+    if (user.keyword.isNotEmpty) {
+      if (user.keyword == Keywords.WHEN) {
+        processWhen(body, user);
+      } else if (user.keyword == Keywords.BREAKFAST) {
+        breakFast(body, user);
+      } else if (user.keyword == Keywords.LUNCH) {
+        lunch(body, user);
+      } else if (user.keyword == Keywords.DINNER) {
+        dinner(body, user);
+      } else if (user.keyword == Keywords.TIME_FIXED) {
+      } else {
+        ///we asked something in t
+        sorryIDidntUnderstand('', body, user);
+      }
+    } else {
+      ///process
+      conversation(body, user);
+    }
+  }
+
+  ///user answered when he wants to order
+  void processWhen(Body body, User user) async {
+    if (user.order_date.isEmpty) {
+      final DateTime dt = parseDate(body.text);
+
+      if (dt != null) {
+        ///set the order date
+        user.order_date = dt.toIso8601String();
+
+        ///save session
+        await _commands.hmset(body.phone, hash: user.map);
+        if (dt != null) {
+          if (isToday(dt)) {
+            ///prepare next message
+            final String nextMessage =
+                'You are ordering for ${formatDateForConvo(dt)}'
+                '\n\nFallowing options available..${getAvailableOrders()}'
+                '\n_for example if you want ${Keywords.DINNER.toLowerCase()} answer with the same_';
+
+            ///post
+            post(body, nextMessage);
+          } else {
+            final String nextMessage =
+                'You are ordering for ${formatDateForConvo(dt)}'
+                '\n\nFallowing options available..${getAvailableOrders(isToday: false)}'
+                '\n_for example if you want ${Keywords.DINNER.toLowerCase()} answer with the same_';
+
+            ///post
+            post(body, nextMessage);
+          }
+        } else {
+          ///we didnt understand the date
+          sorryIDidntUnderstand('I\'m expecting a date..', body, user);
+        }
+      } else {
+        sorryIDidntUnderstand(
+          'I\'m expecting a valid meal name available options above:',
+          body,
+          user,
+        );
+      }
+    } else {
+      sorryIDidntUnderstand(
+        'I\'m expecting a valid meal name available options above:',
+        body,
+        user,
+      );
+    }
+  }
+
+  ///no keywords found or nothing is in progress and the user is registerred catch a convo
+  void conversation(Body body, User user) {
+    if (isGreeting(body.text)) {
+      ///greet user
+      post(body, 'Good ${greeting()}');
     }
   }
 
   ///proceed with finding and processing the key word
   void processKeyWord(String keyword, Body body, User user) {
     switch (keyword) {
+      case Keywords.BREAKFAST:
+        {
+          breakFast(body, user);
+        }
+        break;
+      case Keywords.LUNCH:
+        {
+          lunch(body, user);
+        }
+        break;
+      case Keywords.DINNER:
+        {
+          dinner(body, user);
+        }
+        break;
+      case Keywords.ORDER:
+        {
+          order(body, user);
+        }
+        break;
       case Keywords.CANCEL:
         {
           cancelLastRequest(body, user);
@@ -127,10 +223,167 @@ class IamBot {
         {
           ///this case must never happen
           sorryIDidntUnderstand('', body, user);
-          throw Exception(
-              'ThisMustNotHaveHappenedError while processing keyword $keyword');
+          //throw Exception('ThisMustNotHaveHappenedError while processing keyword $keyword');
         }
     }
+  }
+
+  ///user wants breakfast
+  void breakFast(Body body, User user) async {
+    ///check if user is not going through anything else
+    if (user.keyword == Keywords.WHEN ||
+        user.keyword == Keywords.DINNER ||
+        user.keyword == Keywords.LUNCH) {
+      ///set keyword so we can identify what the user was going through in the next session
+      user.keyword = Keywords.BREAKFAST;
+
+      ///save session
+      await _commands.hmset(body.phone, hash: user.map);
+
+      ///now ask timings
+      final String nextMessage =
+          'Let me know at what time you need the breakfast..'
+          '\nAvailable timing options, *${breakFastTimings()}*';
+
+      ///send the message
+      post(body, nextMessage);
+    } else if (user.keyword == Keywords.BREAKFAST) {
+      ///same key word
+      post(body, 'I\'m expecting a time out of the above options..');
+    } else {
+      sorryIDidntUnderstand(
+          'To start ordering send *${Keywords.ORDER}*', body, user);
+    }
+  }
+
+  ///user wants lunch
+  void lunch(Body body, User user) async {
+    ///check if user is not going through anything else
+    if (user.keyword == Keywords.WHEN ||
+        user.keyword == Keywords.DINNER ||
+        user.keyword == Keywords.BREAKFAST) {
+      ///set keyword so we can identify what the user was going through in the next session
+      user.keyword = Keywords.LUNCH;
+
+      ///save session
+      await _commands.hmset(body.phone, hash: user.map);
+
+      ///now ask timings
+      final String nextMessage = 'Let me know at what time you need the lunch..'
+          '\nAvailable timing options, *${lunchTimings()}*';
+
+      ///send the message
+      post(body, nextMessage);
+    } else if (user.keyword == Keywords.LUNCH) {
+      if (isLunchTime(body.text)) {
+        ///process the timing from the answer
+        final DateTime orderingTime =
+            getOrderingTime(user.order_date, body.text);
+        if (orderingTime != null) {
+          ///set the timings for the order
+          user.order_date = orderingTime.toIso8601String();
+
+          ///save session
+          user.keyword = Keywords.TIME_FIXED;
+          await _commands.hmset(body.phone, hash: user.map);
+
+          ///send the available options for selected time
+          sendFoodOptions(body, user);
+        } else {
+          sorryIDidntUnderstand(
+              'I\'m expecting a time out of the above options..', body, user);
+        }
+      } else {
+        ///same key word
+        post(body, 'I\'m expecting a time out of the above options..');
+      }
+    } else {
+      sorryIDidntUnderstand('To start ordering send *${Keywords.ORDER}*', body, user);
+    }
+  }
+
+  ///send the food options available
+  void sendFoodOptions(Body body, User user) {
+    post(body, 'demo list');
+  }
+
+  ///user wants dinner
+  void dinner(Body body, User user) async {
+    ///check if user is not going through anything else
+    if (user.keyword == Keywords.WHEN ||
+        user.keyword == Keywords.LUNCH ||
+        user.keyword == Keywords.BREAKFAST) {
+      ///set keyword so we can identify what the user was going through in the next session
+      user.keyword = Keywords.DINNER;
+
+      ///save session
+      await _commands.hmset(body.phone, hash: user.map);
+
+      ///now ask timings
+      final String nextMessage =
+          'Let me know at what time you need the dinner..'
+          '\nAvailable timing options, *${dinnerTimings()}*';
+
+      ///send the message
+      post(body, nextMessage);
+    } else if (user.keyword == Keywords.DINNER) {
+      ///same key word
+      post(body, 'I\'m expecting a time out of the above options..');
+    } else {
+      sorryIDidntUnderstand('To start ordering send *${Keywords.ORDER}*', body, user);
+    }
+  }
+
+  ///user wants to order food
+  void order(Body body, User user) async {
+    ///ask them for what day is the order for
+    const String nextMessage =
+        'Tell me for when are you ordering?\ntoday? tomorrow? or any date in the format *dd/mm/yy*';
+
+    ///save session so we can identify we weere expecting a date or day
+    user.keyword = Keywords.WHEN;
+    await _commands.hmset(body.phone, hash: user.map);
+
+    ///send message
+    post(body, nextMessage);
+    /* if(isNonTiming()){
+
+    }else if (user.keyword.isEmpty) {
+      ///set user keyword so we can identify at next session
+      user.keyword = Keywords.ORDER;
+
+      ///save sesssion
+      await _commands.hmset(body.phone, hash: user.map);
+
+      ///prepare next message
+      final nextMessage = 'To order use these keywords respectively'
+          '\n*${Keywords.BREAKFAST.toLowerCase()}, ${Keywords.LUNCH.toLowerCase()}, ${Keywords.DINNER.toLowerCase()}*'
+          '\n\nFallowing options available for you..'
+          '${getAvailableOrderingTimings()}';
+
+      ///send the message
+      post(body, nextMessage);
+    } else if (user.keyword == Keywords.ORDER ||
+        user.keyword == Keywords.BREAKFAST ||
+        user.keyword == Keywords.LUNCH ||
+        user.keyword == Keywords.DINNER) {
+      ///same messsage
+      final String nextMessage = 'I\'m listening..send *${Keywords.CANCEL.toLowerCase()} to order something else..';
+      post(body, nextMessage);
+    } else {
+      problem(body, 'order');
+    } */
+  }
+
+  ///report problem to user and log aswel
+  void problem(Body body, String s) {
+    print('theres a problem @ fn $s() sent message to the user');
+    post(
+      body,
+      'Hello, you found an error,\nClick https://wa.me/919964687717\nto send the '
+      'developer a screenshot on whatsapp itself, '
+      'a small help from your side to make the this product a better one',
+    );
   }
 
   ///user wants to cancel the last request
@@ -149,6 +402,21 @@ class IamBot {
 
       ///post the message
       post(body, nextMessage);
+    } else if (user.keyword.isNotEmpty) {
+      ///prepare next message
+      const String nextMessage =
+          'Okay, I cancelled your last request was cancelled..';
+
+      ///cancel the last keyword request
+      user.keyword = '';
+      user.order_date = '';
+
+      ///save for next session
+      await _commands.hmset(body.phone, hash: user.map);
+
+      ///send message
+      post(body, nextMessage);
+      sendOptions(body, user);
     } else {
       ///we dont know why customer asked cancellation we dont know how to handle the request
       sorryIDidntUnderstand('Please give the details requested..', body, user);
@@ -228,7 +496,8 @@ class IamBot {
         break;
       default:
         {
-          throw Exception('ThisShouldNeverHaveHappened');
+          //throw Exception('ThisShouldNeverHaveHappened');
+          sorryIDidntUnderstand('', body, user);
         }
     }
   }
@@ -556,6 +825,7 @@ class IamBot {
 
   ///we didnt understood the last message try to ask the same in different manner
   void sorryIDidntUnderstand(String s, Body body, User user) {
+    ///prpare message
     final String nextMessage = 'Sorry I didn\'t undestand,\n\n$s';
 
     ///send the nextmessage
@@ -575,11 +845,11 @@ class IamBot {
     );
   }
 
-  void post(Body body, String text) async {
+  void post(Body body, String nextMessage) async {
     if (body.api == API.gupshup) {
-      postGS(body.phone, text);
+      postGS(body.phone, nextMessage);
     } else if (body.api == API.maytapi) {
-      postM(body.phone, text);
+      postM(body.phone, nextMessage);
     }
   }
 
@@ -596,13 +866,13 @@ class IamBot {
         'x-maytapi-key': 'a50bb09e-e8ad-420a-9454-4ddbf7afc5de',
       },
       body: json.encode({
-        'to_number' : phone,
-        'type':'text',
+        'to_number': phone,
+        'type': 'text',
         'message': text,
       }),
     );
 
-    print(response.body);
+    //print(response.body);
   }
 
   //THE MESSAGE ENDPOINT TO SEND OUT WHATSAPP MESSAGES
@@ -636,7 +906,7 @@ class IamBot {
   }
 
   ///this request gets google reverse geocoding for the provided latLong
-  final String _gk = 'AIzaSyCj8Rpr-khGa_vmJ3cviQ1IlprhNVKUOQQ';
+  final String _gk = 'AIzaSyAnuleb6FboNl99gbiH7vQv9h-Hb_C5TEQ';
   final String _geocodeEnd =
       'https://maps.googleapis.com/maps/api/geocode/json?';
 
@@ -649,6 +919,7 @@ class IamBot {
 
     ///this encodes full fledged valid address from google using the users location, should consider using this
     try {
+      print(map);
       final String address =
           Map.castFrom(List.castFrom(map['results'] as List)?.first as Map)[
               'formatted_address'] as String;
@@ -657,5 +928,25 @@ class IamBot {
       print(e);
       return '';
     }
+  }
+
+  Map<String,String> breakfast_menu;
+  Map<String,String> lunch_menu;
+  Map<String,String> dinner_menu;
+  void addMenu(Map<String,Map<String,String>> menu){
+    breakfast_menu = menu['breakfast_menu'];
+    lunch_menu = menu['lunch_menu'];
+    dinner_menu = menu['dinner_menu'];
+    print(breakfast_menu);
+    print(lunch_menu);
+    print(dinner_menu);
+  }
+
+  bool _dumping = false;
+  Future<void> dump() async {
+    _dumping = true;
+    await _commands.save();
+    _dumping = false;
+    return;
   }
 }
